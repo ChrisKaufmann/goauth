@@ -18,12 +18,13 @@ var (
 	stmtInsertUserLogin		*sql.Stmt
 	stmtGetUserShare		*sql.Stmt
 	stmtGetUserLogin		*sql.Stmt
-	stmtGetUser          *sql.Stmt
-	stmtGetUserID        *sql.Stmt
-	stmtGetUserBySession *sql.Stmt
-	stmtGetUserByShared	 *sql.Stmt
-	stmtGetUserByID		 *sql.Stmt
+	stmtGetUser				*sql.Stmt
+	stmtGetUserID			*sql.Stmt
+	stmtGetUserBySession	*sql.Stmt
+	stmtGetUserByShared		*sql.Stmt
+	stmtGetUserByID			*sql.Stmt
 	stmtGetUserByLoginCode  *sql.Stmt
+    stmtLogoutSession		*sql.Stmt
 )
 func userDB() {
 	var err error
@@ -51,6 +52,12 @@ func userDB() {
 	stmtGetUserID, err = u.Sth(db,sguid)
 	if err != nil {glog.Fatalf("u.Sth(%s): %s", sguid, err)}
 
+	sls := "delete from sessions where session_hash=? limit 1"
+	stmtLogoutSession, err = u.Sth(db, sls)
+	if err != nil {
+		glog.Fatalf(" DB(): u.sth(%s) %s", sls, err)
+	}
+
 	sgubs:="select users.id, users.email from users, sessions where users.id=sessions.user_id and sessions.session_hash=?"
 	stmtGetUserBySession,err = u.Sth(db,sgubs)
 	if err != nil {glog.Fatalf("u.Sth(%s): %s", sgubs, err)}
@@ -76,6 +83,13 @@ func (us User) String() (string) {
 func (us User) AddSession(sh string) (err error) {
 	_,err = stmtCookieIns.Exec(us.ID, sh)
 	if err != nil {glog.Errorf("user.AddSession(%s)stmtCookieIns(%s,%s):%s",us,us.ID,sh,err) }
+	return err
+}
+func (us User) DeleteSession(sh string) (err error) {
+	_,err = stmtLogoutSession.Exec(sh)
+	if err != nil {
+		glog.Errorf("user.DeleteSession()-stmtLogoutSession(%s): %s", sh, err)
+	}
 	return err
 }
 func (us User) ShareCode() (string) {

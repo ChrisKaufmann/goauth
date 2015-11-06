@@ -98,6 +98,12 @@ func TestUser(t *testing.T) {
 	if err != nil {t.Errorf("GetUserByLoginToken(%s): %s", tlc, err)}
 	if u5.Email != te {t.Errorf("Wrong user by logintoken: %s, expected %s", u5.Email, te)}
 
+	//logout session
+	print("\tuser.DeleteSession()\n")
+	err = u1.DeleteSession(sid)
+	if err != nil {t.Errorf("u1.DeleteSession(%s): %s", sid, err)}
+	if SessionExists(sid) {t.Errorf("Session still exists after deleting!")}
+
 }
 func vl(t *testing.T,s string, e interface{}, a interface{}) {
     if e != a {

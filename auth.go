@@ -4,9 +4,9 @@ import (
 	"code.google.com/p/goauth2/oauth"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	u "github.com/ChrisKaufmann/goutils"
 	_ "github.com/go-sql-driver/mysql"
-	"fmt"
 	"github.com/golang/glog"
 	"github.com/msbranco/goconfig"
 	"io/ioutil"
@@ -14,25 +14,31 @@ import (
 	"time"
 )
 
-var oauthCfg = &oauth.Config{
+var GoogOauthCfg = &oauth.Config{
 	AuthURL:    "https://accounts.google.com/o/oauth2/auth",
 	TokenURL:   "https://accounts.google.com/o/oauth2/token",
 	Scope:      "https://www.googleapis.com/auth/userinfo.email",
 	TokenCache: oauth.CacheFile(cachefile),
+}
+var FBOauthCfg = &oauth.Config{ //setup
+	AuthURL:  "https://www.facebook.com/dialog/oauth",
+	TokenURL: "https://graph.facebook.com/oauth/access_token",
+	Scope:    "",
 }
 
 const profileInfoURL = "https://www.googleapis.com/oauth2/v1/userinfo"
 const cachefile = "/dev/null"
 
 var (
-	MyURL                string
-	db                   *sql.DB
-	cookieName           string = "auth"
-	environment          string = "production"
-	stmtCookieIns        *sql.Stmt
-	stmtInsertUser       *sql.Stmt
-	stmtSessionExists    *sql.Stmt
-	stmtLogoutSession    *sql.Stmt
+	MyURL             string
+	db                *sql.DB
+	cookieName        string = "auth"
+	environment       string = "production"
+	stmtCookieIns     *sql.Stmt
+	stmtInsertUser    *sql.Stmt
+	stmtSessionExists *sql.Stmt
+	googleEnabled     bool
+	facebookEnabled   bool
 )
 
 func CookieName(c string) {
@@ -56,10 +62,6 @@ func DB(d *sql.DB) {
 	if err != nil {
 		glog.Fatalf(" DB(): u.sth(stmtSessionExists) %s", err)
 	}
-	stmtLogoutSession, err = u.Sth(db, "delete from sessions where session_hash=? limit 1")
-	if err != nil {
-		glog.Fatalf(" DB(): u.sth(stmtLogoutSession) %s", err)
-	}
 	userDB()
 }
 func Config(config string) {
@@ -67,20 +69,33 @@ func Config(config string) {
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(config)")
 	}
-	oauthCfg.ClientId, err = c.GetString("Google", "ClientId")
+	GoogOauthCfg.ClientId, err = c.GetString("Google", "ClientId")
 	if err != nil {
-		glog.Fatalf("init(): readconfigfile(Google.ClientId)")
+		googleEnabled = false
+		glog.Errorf("init(): readconfigfile(Google.ClientId)")
 	}
-	oauthCfg.ClientSecret, err = c.GetString("Google", "ClientSecret")
+	GoogOauthCfg.ClientSecret, err = c.GetString("Google", "ClientSecret")
 	if err != nil {
-		glog.Fatalf("init(): readconfigfile(Google.ClientSecret)")
+		googleEnabled = false
+		glog.Errorf("init(): readconfigfile(Google.ClientSecret)")
+	}
+	FBOauthCfg.ClientId, err = c.GetString("Facebook", "ClientId")
+	if err != nil {
+		facebookEnabled = false
+		glog.Errorf("init(): readconfigfile(Facebook.ClientID)")
+	}
+	FBOauthCfg.ClientSecret, err = c.GetString("Facebook", "ClientSecret")
+	if err != nil {
+		facebookEnabled = false
+		glog.Errorf("init(): readconfigfile(Facebook.ClientSecret)")
 	}
 	url, err := c.GetString("Web", "url")
 	MyURL = url
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(Web.url)")
 	}
-	oauthCfg.RedirectURL = url + "oauth2callback"
+	GoogOauthCfg.RedirectURL = url + "oauth2callback"
+	FBOauthCfg.RedirectURL = url + "fboauth2callback"
 }
 
 func HandleLogout(w http.ResponseWriter, r *http.Request) {
@@ -100,10 +115,11 @@ func HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
+
 // Start the authorization process
 func HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	//Get the Google URL which shows the Authentication page to the user
-	url := oauthCfg.AuthCodeURL("")
+	url := GoogOauthCfg.AuthCodeURL("")
 
 	//redirect user to that page
 	http.Redirect(w, r, url, http.StatusFound)
@@ -114,36 +130,48 @@ func DemoUser(w http.ResponseWriter, r *http.Request) {
 	demo_email := "demo@exmaple.com"
 	var us User
 	var err error
-	if ! UserExists(demo_email) {
-		us,err = AddUser(demo_email)
-		if err != nil { glog.Errorf("DemoUser(w,r)AddUser(%s): %s", demo_email, err);return }
+	if !UserExists(demo_email) {
+		us, err = AddUser(demo_email)
+		if err != nil {
+			glog.Errorf("DemoUser(w,r)AddUser(%s): %s", demo_email, err)
+			return
+		}
 	} else {
 		us, err = GetUserByEmail(demo_email)
-		if err != nil { glog.Errorf("DemoUser(w,r)GetUserByEmail(%s): %s", demo_email, err);return }
+		if err != nil {
+			glog.Errorf("DemoUser(w,r)GetUserByEmail(%s): %s", demo_email, err)
+			return
+		}
 	}
 	var authString = u.RandomString(64)
 	//set the cookie
 	err = us.AddSession(authString)
-	if err != nil {glog.Errorf("DemoUser(w,r)AddUser(%s): %s", authString, err);return }
-    expire := time.Now().AddDate(1, 0, 0)
+	if err != nil {
+		glog.Errorf("DemoUser(w,r)AddUser(%s): %s", authString, err)
+		return
+	}
+	expire := time.Now().AddDate(1, 0, 0)
 	cookie := http.Cookie{Name: cookieName, Value: authString, Expires: expire}
 	http.SetCookie(w, &cookie)
 	http.Redirect(w, r, "/main.html", http.StatusFound)
 }
-func LoginToken(w http.ResponseWriter, r *http.Request,lt string)(err error) {
+func LoginToken(w http.ResponseWriter, r *http.Request, lt string) (err error) {
 	us, err := GetUserByLoginToken(lt)
 	fmt.Printf("got user: %s", us)
 	if err != nil {
-		glog.Errorf("LoginToken(%s) No session by that token: %s", lt,err)
+		glog.Errorf("LoginToken(%s) No session by that token: %s", lt, err)
 		return err
 	}
 	var authString = u.RandomString(64)
 	fmt.Printf("AddSession(%s)", authString)
 	err = us.AddSession(authString)
-	if err != nil {glog.Errorf("LoginToken():us.AddSession(%s): %s", authString, err);return err }
-	expire := time.Now().AddDate(1,0,0)
+	if err != nil {
+		glog.Errorf("LoginToken():us.AddSession(%s): %s", authString, err)
+		return err
+	}
+	expire := time.Now().AddDate(1, 0, 0)
 	cookie := http.Cookie{Name: cookieName, Value: authString, Expires: expire, Path: "/"}
-	fmt.Printf("http.SetCookie(w,%s)expore:%s",cookie,expire)
+	fmt.Printf("http.SetCookie(w,%s)expore:%s", cookie, expire)
 	http.SetCookie(w, &cookie)
 	http.Redirect(w, r, "/main.html", http.StatusFound)
 	return err
@@ -151,17 +179,20 @@ func LoginToken(w http.ResponseWriter, r *http.Request,lt string)(err error) {
 
 // Function that handles the callback from the Google server
 func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) {
+	if googleEnabled == false {
+		return
+	}
 	//Get the code from the response
 	code := r.FormValue("code")
 
-	t := &oauth.Transport{Config: oauthCfg}
+	t := &oauth.Transport{Config: GoogOauthCfg}
 
 	// Exchange the received code for a token
-	_, err := oauthCfg.TokenCache.Token()
+	_, err := GoogOauthCfg.TokenCache.Token()
 	if err != nil {
 		_, err := t.Exchange(code)
 		if err != nil {
-			glog.Errorf("HandleOauth2Callback:oauthCfg.TokenCache.Token():t.Exchange(%s): %s", code, err)
+			glog.Errorf("HandleOauth2Callback:GoogOauthCfg.TokenCache.Token():t.Exchange(%s): %s", code, err)
 		}
 	}
 
@@ -232,12 +263,12 @@ func LoggedIn(w http.ResponseWriter, r *http.Request) (bool, User) {
 	}
 	cookie, err := r.Cookie(cookieName)
 	switch {
-		case err == http.ErrNoCookie: // just means cookie doesn't exist or we couldn't read
-			fmt.Printf("Couldn't get cookie")
-			return false, falseuser
-		case err != nil:
-			glog.Errorf("Loggedin() r.Cookie(%s): %s", cookieName, err)
-			return false, falseuser
+	case err == http.ErrNoCookie: // just means cookie doesn't exist or we couldn't read
+		fmt.Printf("Couldn't get cookie")
+		return false, falseuser
+	case err != nil:
+		glog.Errorf("Loggedin() r.Cookie(%s): %s", cookieName, err)
+		return false, falseuser
 	}
 	tokHash := cookie.Value
 	if !SessionExists(tokHash) {
