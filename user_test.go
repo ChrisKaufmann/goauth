@@ -140,11 +140,7 @@ func initTest(t *testing.T)  {
     }
     _,err = db.Query("Drop table if exists users;")
     ec(t,"drop table things",err)
-	_,err = db.Query("create table `users` (id int unsigned primary key not null auto_increment,email varchar(128),share_token char(128),login_token char(128));")
-	ec(t,"create table users", err)
     _,err = db.Query("Drop table if exists sessions;")
     ec(t,"drop table sessions",err)
-	_,err = db.Query("create table sessions (	user_id varchar(255) NOT NULL,	session_hash char(255) NOT NULL PRIMARY KEY);")
-	ec(t,"create table sessions", err)
 	DB(db)
 }

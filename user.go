@@ -28,6 +28,15 @@ var (
 )
 func userDB() {
 	var err error
+
+	scst := "create table  if not exists `sessions` ( `user_id` varchar(255) NOT NULL, `session_hash` char(255) NOT NULL, PRIMARY KEY (`session_hash`)) ;"
+	_, err = db.Exec(scst)
+	if err != nil {glog.Fatalf("db.Exec(%s): %s", scst, err)}
+
+	scut := "create table if not exists `users` ( `id` int(10) unsigned NOT NULL AUTO_INCREMENT, `email` varchar(128) DEFAULT NULL, `share_token` char(128) DEFAULT NULL, `login_token` char(128) DEFAULT NULL, PRIMARY KEY (`id`))"
+	_, err = db.Exec(scut)
+	if err != nil {glog.Fatalf("db.Exec(%s): %s", scut, err)}
+
 	sius:= "update users set share_token=? where id=?"
 	stmtInsertUserShare, err = u.Sth(db,sius)
 	if err != nil {glog.Fatalf("u.Sth(%s): %s",sius,err)}
