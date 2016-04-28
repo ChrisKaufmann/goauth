@@ -1,5 +1,5 @@
 [DB]
 host=
-user=myuser
-pass=mypass
-db=mydb
+user=gousertestuser
+pass=gousertestpassword
+db=gousertest
