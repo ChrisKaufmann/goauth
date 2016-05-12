@@ -5,7 +5,6 @@ import (
 )
 
 // const te = "user@example.com" //imported from user
-// const sid = "myreallylongsessioncodegoeshereandisrealllllylongok?" //imported from user
 
 func TestAuth(t *testing.T) {
 	initTest(t) //creates a blank DB to play with
@@ -14,11 +13,15 @@ func TestAuth(t *testing.T) {
 	//Add a user
 	print("\tAddUser\n")
 	u1, err := AddUser(te)
-	if err != nil {t.Errorf("AddUser(%s): %s", te, err)}
+	if err != nil {
+		t.Errorf("AddUser(%s): %s", te, err)
+	}
 
 	//And a session
 	print("\tAddSession\n")
-	err = u1.AddSession(sid)
-	if err != nil {t.Errorf("user.AddSession(%s): %s", sid, err)}
+	err = u1.AddSession("my new session")
+	if err != nil {
+		t.Errorf("user.AddSession(%s): %s", "my new session", err)
+	}
 
 }

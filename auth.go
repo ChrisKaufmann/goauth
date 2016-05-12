@@ -50,6 +50,7 @@ func Environment(e string) {
 func DB(d *sql.DB) {
 	db = d
 	var err error
+	userDB()
 	stmtCookieIns, err = u.Sth(db, "INSERT INTO sessions (user_id,session_hash) VALUES( ? ,?  )")
 	if err != nil {
 		glog.Fatalf(" DB(): u.sth(stmtCookieIns) %s", err)
@@ -62,12 +63,11 @@ func DB(d *sql.DB) {
 	if err != nil {
 		glog.Fatalf(" DB(): u.sth(stmtSessionExists) %s", err)
 	}
-	userDB()
 }
 func Config(config string) {
 	c, err := goconfig.ReadConfigFile(config)
-	googleEnabled=true
-	facebookEnabled=false
+	googleEnabled = true
+	facebookEnabled = false
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(config)")
 	}
