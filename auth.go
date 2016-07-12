@@ -50,6 +50,7 @@ func Environment(e string) {
 func DB(d *sql.DB) {
 	db = d
 	var err error
+	userDB()
 	stmtCookieIns, err = u.Sth(db, "INSERT INTO sessions (user_id,session_hash) VALUES( ? ,?  )")
 	if err != nil {
 		glog.Fatalf(" DB(): u.sth(stmtCookieIns) %s", err)
@@ -62,10 +63,11 @@ func DB(d *sql.DB) {
 	if err != nil {
 		glog.Fatalf(" DB(): u.sth(stmtSessionExists) %s", err)
 	}
-	userDB()
 }
 func Config(config string) {
 	c, err := goconfig.ReadConfigFile(config)
+	googleEnabled = true
+	facebookEnabled = false
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(config)")
 	}
@@ -122,6 +124,10 @@ func HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	url := GoogOauthCfg.AuthCodeURL("")
 
 	//redirect user to that page
+	http.Redirect(w, r, url, http.StatusFound)
+}
+func HandleAuthorizeFacebook(w http.ResponseWriter, r *http.Request) {
+	url := FBOauthCfg.AuthCodeURL("")
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -212,6 +218,9 @@ func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) {
 		glog.Errorf("HandleOauth2Callback:json.Unmarshal(%s): %s", body, err)
 		return
 	}
+	err  = AddSession(w, r, f)
+}
+func AddSession(w http.ResponseWriter,r *http.Request,  f interface{})( err error) {
 	m := f.(map[string]interface{})
 	var authString = u.RandomString(64)
 	email := m["email"].(string)
@@ -239,7 +248,48 @@ func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) {
 	cookie := http.Cookie{Name: cookieName, Value: authString, Expires: expire}
 	http.SetCookie(w, &cookie)
 	http.Redirect(w, r, "/main", http.StatusFound)
+	return err
 }
+
+func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
+	if facebookEnabled == false {
+		return
+	}
+	//Get the code from the response
+	code := r.FormValue("code")
+
+	t := &oauth.Transport{Config: FBOauthCfg}
+
+	// Exchange the received code for a token
+	_, err := FBOauthCfg.TokenCache.Token()
+	if err != nil {
+		_, err := t.Exchange(code)
+		if err != nil {
+			glog.Errorf("HandleOauth2Callback:FBOauthCfg.TokenCache.Token():t.Exchange(%s): %s", code, err)
+		}
+	}
+	// Make the request.
+	req, err := t.Client().Get(FBOauthCfg.TokenURL)
+	if err != nil {
+		glog.Errorf("HandleOauth2Callback:t.Client().Get(%s): %s", FBOauthCfg.TokenURL, err)
+		return
+	}
+	defer req.Body.Close()
+	body, _ := ioutil.ReadAll(req.Body)
+	//body.id is the  id to use
+	//set a cookie with the id, and random hash. then save the id/hash pair to db for lookup
+	var f interface{}
+	err = json.Unmarshal(body, &f)
+	if err != nil {
+		glog.Errorf("HandleOauth2Callback:json.Unmarshal(%s): %s", body, err)
+		return
+	}
+	err  = AddSession(w, r, f)
+
+	return
+}
+
+
 func LoggedIn(w http.ResponseWriter, r *http.Request) (bool, User) {
 	var falseuser User
 	if environment == "test" {
