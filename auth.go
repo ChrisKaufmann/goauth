@@ -254,10 +254,12 @@ func AddSession(w http.ResponseWriter,r *http.Request,  f interface{})( err erro
 
 func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 	if facebookEnabled == false {
+		print("facebookEnabled is false, returning\n")
 		return
 	}
 	//Get the code from the response
 	code := r.FormValue("code")
+	fmt.Printf("fb code = :%s\n", code)
 
 	t := &oauth.Transport{Config: FBOauthCfg}
 
