@@ -67,7 +67,7 @@ func DB(d *sql.DB) {
 func Config(config string) {
 	c, err := goconfig.ReadConfigFile(config)
 	googleEnabled = true
-	facebookEnabled = false
+	facebookEnabled = true
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(config)")
 	}
