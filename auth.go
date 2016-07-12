@@ -127,7 +127,8 @@ func HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 func HandleAuthorizeFacebook(w http.ResponseWriter, r *http.Request) {
-	url := FBOauthCfg.AuthCodeURL("")
+//	url := FBOauthCfg.AuthCodeURL("")
+	url := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s", FBOauthCfg.AuthURL, FBOauthCfg.ClientId, FBOauthCfg.RedirectURL)
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
