@@ -24,6 +24,7 @@ var FBOauthCfg = &oauth.Config{ //setup
 	AuthURL:  "https://www.facebook.com/dialog/oauth",
 	TokenURL: "https://graph.facebook.com/oauth/access_token",
 	Scope:    "",
+	TokenCache: oauth.CacheFile(cachefile),
 }
 
 const profileInfoURL = "https://www.googleapis.com/oauth2/v1/userinfo"
