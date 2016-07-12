@@ -28,7 +28,7 @@ var FBOauthCfg = &oauth.Config{ //setup
 }
 
 const profileInfoURL = "https://www.googleapis.com/oauth2/v1/userinfo"
-const cachefile = "/dev/null"
+const cachefile = "/tmp/ponytoken"
 
 var (
 	MyURL             string
