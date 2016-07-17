@@ -262,8 +262,31 @@ func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
 	fmt.Printf("fb code = :%s\n", code)
 
-	t := &oauth.Transport{Config: FBOauthCfg}
+	url := fmt.Sprintf("%s?client_id=%s&redirect_url=%s&client_secret=%s&code=%s", FBOauthCfg.TokenURL, FBOauthCfg.ClientId, FBOauthCfg.RedirectURL, FBOauthCfg.ClientSecret, code)
+	f, err := GetJsonFromURL(url)
+	m := f.(map[string]interface{})
+	fmt.Printf("Returned data: %s\n", m)
+	access_token := m["access_token"].(string)
+	if access_token == "" {
+		glog.Errorf("No access_token: %s", m)
+		return
+	}
 
+	//graph.facebook.com/debug_token?input_token={token-to-inspect}&access_token={app-token-or-admin-token}
+	url = fmt.Sprintf("graph.facebook.com/debug_token?input_token=%s&access_token=%s", access_token, FBOauthCfg.ClientId)
+	d, err := GetJsonFromURL(url)
+	if err != nil {
+		glog.Errorf("GetJsonFromUrl(%s): %s", url, err)
+		return
+	}
+	fmt.Printf("Debug_token: %s", d)
+
+
+
+
+
+	//t := &oauth.Transport{Config: FBOauthCfg}
+/*
 	// Exchange the received code for a token
 	_, err := FBOauthCfg.TokenCache.Token()
 	if err != nil {
@@ -288,11 +311,28 @@ func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 		glog.Errorf("HandleOauth2Callback:json.Unmarshal(%s): %s", body, err)
 		return
 	}
+*/
 	err  = AddSession(w, r, f)
 
 	return
 }
+func GetJsonFromURL(url string) (j interface{}, err error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		glog.Errorf("http.Get(%s): %s", url, err)
+		return j, err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("ioutil.ReadAll(resp.Body): %s", err)
+		return j, err
+	}
 
+	var f interface{}
+	err = json.Unmarshal(body, &f)
+	return f, err
+}
 
 func LoggedIn(w http.ResponseWriter, r *http.Request) (bool, User) {
 	var falseuser User
