@@ -1,7 +1,9 @@
 package auth
 
 import (
-	"code.google.com/p/goauth2/oauth"
+	"golang.org/x/oauth2"
+	fboauth "golang.org/x/oauth2/facebook"
+	googleoauth "golang.org/x/oauth2/google"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,22 +12,11 @@ import (
 	"github.com/golang/glog"
 	"github.com/msbranco/goconfig"
 	"io/ioutil"
+	//"net/url"
 	"net/http"
 	"time"
 )
 
-var GoogOauthCfg = &oauth.Config{
-	AuthURL:    "https://accounts.google.com/o/oauth2/auth",
-	TokenURL:   "https://accounts.google.com/o/oauth2/token",
-	Scope:      "https://www.googleapis.com/auth/userinfo.email",
-	TokenCache: oauth.CacheFile(cachefile),
-}
-var FBOauthCfg = &oauth.Config{ //setup
-	AuthURL:  "https://www.facebook.com/dialog/oauth",
-	TokenURL: "https://graph.facebook.com/oauth/access_token",
-	Scope:    "",
-	TokenCache: oauth.CacheFile(cachefile),
-}
 
 const profileInfoURL = "https://www.googleapis.com/oauth2/v1/userinfo"
 const cachefile = "/tmp/ponytoken"
@@ -40,6 +31,19 @@ var (
 	stmtSessionExists *sql.Stmt
 	googleEnabled     bool
 	facebookEnabled   bool
+	GoogOauthCfg = &oauth2.Config{
+		ClientID:	"",
+		ClientSecret: "",
+		Scopes: []string{"https://www.googleapis.com/auth/userinfo.email",},
+		Endpoint: googleoauth.Endpoint,
+	}
+	FBOauthCfg = &oauth2.Config {
+		ClientID:	"",
+		ClientSecret: "",
+		Scopes: []string{"email"},
+		Endpoint: fboauth.Endpoint,
+	}
+	oauthStateString = u.RandomString(32)
 )
 
 func CookieName(c string) {
@@ -72,17 +76,17 @@ func Config(config string) {
 	if err != nil {
 		glog.Fatalf("init(): readconfigfile(config)")
 	}
-	GoogOauthCfg.ClientId, err = c.GetString("Google", "ClientId")
+	GoogOauthCfg.ClientID, err = c.GetString("Google", "ClientID")
 	if err != nil {
 		googleEnabled = false
-		glog.Errorf("init(): readconfigfile(Google.ClientId)")
+		glog.Errorf("init(): readconfigfile(Google.ClientID)")
 	}
 	GoogOauthCfg.ClientSecret, err = c.GetString("Google", "ClientSecret")
 	if err != nil {
 		googleEnabled = false
 		glog.Errorf("init(): readconfigfile(Google.ClientSecret)")
 	}
-	FBOauthCfg.ClientId, err = c.GetString("Facebook", "ClientId")
+	FBOauthCfg.ClientID, err = c.GetString("Facebook", "ClientID")
 	if err != nil {
 		facebookEnabled = false
 		glog.Errorf("init(): readconfigfile(Facebook.ClientID)")
@@ -128,8 +132,8 @@ func HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 func HandleAuthorizeFacebook(w http.ResponseWriter, r *http.Request) {
-//	url := FBOauthCfg.AuthCodeURL("")
-	url := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s", FBOauthCfg.AuthURL, FBOauthCfg.ClientId, FBOauthCfg.RedirectURL)
+	url := FBOauthCfg.AuthCodeURL(oauthStateString, oauth2.AccessTypeOnline)
+
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -186,46 +190,37 @@ func LoginToken(w http.ResponseWriter, r *http.Request, lt string) (err error) {
 }
 
 // Function that handles the callback from the Google server
-func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) {
+func HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if googleEnabled == false {
 		return
 	}
-	//Get the code from the response
-	code := r.FormValue("code")
+	authcode := r.FormValue("code")
 
-	t := &oauth.Transport{Config: GoogOauthCfg}
-
-	// Exchange the received code for a token
-	_, err := GoogOauthCfg.TokenCache.Token()
+	tok, err := GoogOauthCfg.Exchange(oauth2.NoContext, authcode)
 	if err != nil {
-		_, err := t.Exchange(code)
-		if err != nil {
-			glog.Errorf("HandleOauth2Callback:GoogOauthCfg.TokenCache.Token():t.Exchange(%s): %s", code, err)
-		}
+		fmt.Println("err is", err)
 	}
 
-	// Make the request.
-	req, err := t.Client().Get(profileInfoURL)
-	if err != nil {
-		glog.Errorf("HandleOauth2Callback:t.Client().Get(%s): %s", profileInfoURL, err)
-		return
-	}
-	defer req.Body.Close()
-	body, _ := ioutil.ReadAll(req.Body)
-	//body.id is the google id to use
-	//set a cookie with the id, and random hash. then save the id/hash pair to db for lookup
+	fmt.Println("token is ", tok)
+	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + tok.AccessToken)
+
+	defer response.Body.Close()
+	contents, err := ioutil.ReadAll(response.Body)
+	fmt.Printf("contents: %s", contents)
 	var f interface{}
-	err = json.Unmarshal(body, &f)
+	err = json.Unmarshal(contents, &f)
 	if err != nil {
-		glog.Errorf("HandleOauth2Callback:json.Unmarshal(%s): %s", body, err)
-		return
+		glog.Errorf("json.Unmarshal(%s,f): %s\n", contents, err)
 	}
-	err  = AddSession(w, r, f)
-}
-func AddSession(w http.ResponseWriter,r *http.Request,  f interface{})( err error) {
 	m := f.(map[string]interface{})
-	var authString = u.RandomString(64)
 	email := m["email"].(string)
+	err  = AddSession(w, r, email)
+	if err != nil {
+		glog.Errorf("AddSession(w,r,%s): %s\n", email, err)
+	}
+	return
+}
+func AddSession(w http.ResponseWriter,r *http.Request,  email string)( err error) {
 	var us User
 	if !UserExists(email) {
 		fmt.Printf("HandleOauth2Callback: creating new user %s", email)
@@ -239,6 +234,8 @@ func AddSession(w http.ResponseWriter,r *http.Request,  f interface{})( err erro
 			glog.Errorf("HandleOauth2Callback:UserExists()GetUserEmail(%s): %s", email, err)
 		}
 	}
+	var authString = u.RandomString(64)
+
 
 	err = us.AddSession(authString)
 
@@ -258,80 +255,58 @@ func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 		print("facebookEnabled is false, returning\n")
 		return
 	}
-	//Get the code from the response
-	code := r.FormValue("code")
-	fmt.Printf("fb code = :%s\n", code)
+	authcode := r.FormValue("code")
+	type fbuser struct {
+		Id  string `json:"id"`
+		Name string `json:"name"`
+	}
 
-	url := fmt.Sprintf("%s?client_id=%s&redirect_url=%s&client_secret=%s&code=%s", FBOauthCfg.TokenURL, FBOauthCfg.ClientId, FBOauthCfg.RedirectURL, FBOauthCfg.ClientSecret, code)
-	f, err := GetJsonFromURL(url)
-	m := f.(map[string]interface{})
-	fmt.Printf("Returned data: %s\n", m)
-	access_token := m["access_token"].(string)
-	if access_token == "" {
-		glog.Errorf("No access_token: %s", m)
+	tok, err := FBOauthCfg.Exchange(oauth2.NoContext, authcode)
+	if err != nil {
+		glog.Errorf("FBOauthCfg.Exchange(oauth2.NoContext, %s): %s", authcode, err)
 		return
 	}
 
-	//graph.facebook.com/debug_token?input_token={token-to-inspect}&access_token={app-token-or-admin-token}
-	url = fmt.Sprintf("graph.facebook.com/debug_token?input_token=%s&access_token=%s", access_token, FBOauthCfg.ClientId)
-	d, err := GetJsonFromURL(url)
+	response, err := http.Get("https://graph.facebook.com/me?access_token=" + tok.AccessToken)
 	if err != nil {
-		glog.Errorf("GetJsonFromUrl(%s): %s", url, err)
+		glog.Errorf("http.Get(https://graph.facebook.com/me?access_token=%s): %s", tok.AccessToken, err)
 		return
 	}
-	fmt.Printf("Debug_token: %s", d)
 
-
-
-
-
-	//t := &oauth.Transport{Config: FBOauthCfg}
-/*
-	// Exchange the received code for a token
-	_, err := FBOauthCfg.TokenCache.Token()
+	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		_, err := t.Exchange(code)
-		if err != nil {
-			glog.Errorf("HandleOauth2Callback:FBOauthCfg.TokenCache.Token():t.Exchange(%s): %s", code, err)
-		}
-	}
-	// Make the request.
-	req, err := t.Client().Get(FBOauthCfg.TokenURL)
-	if err != nil {
-		glog.Errorf("HandleOauth2Callback:t.Client().Get(%s): %s", FBOauthCfg.TokenURL, err)
+		glog.Errorf("ioutil.ReadAll(%s): %s", response.Body, err)
 		return
 	}
-	defer req.Body.Close()
-	body, _ := ioutil.ReadAll(req.Body)
-	//body.id is the  id to use
-	//set a cookie with the id, and random hash. then save the id/hash pair to db for lookup
-	var f interface{}
-	err = json.Unmarshal(body, &f)
+
+	var fbu fbuser
+	err = json.Unmarshal(body, &fbu)
 	if err != nil {
-		glog.Errorf("HandleOauth2Callback:json.Unmarshal(%s): %s", body, err)
+		glog.Errorf("json.Unmarshal(%s, fbu): %s", body, err)
 		return
 	}
-*/
-	err  = AddSession(w, r, f)
+	email := fmt.Sprintf("%s@facebook.com", fbu.Id)
 
-	return
+	err = AddSession(w,r,email)
+	if err != nil {
+		glog.Errorf("AddSession(w,r,%s): %s", email, err)
+		return
+	}
 }
-func GetJsonFromURL(url string) (j interface{}, err error) {
-	resp, err := http.Get(url)
+func GetFromURL(u string) (j string, err error) {
+	fmt.Printf("GetJsonFromURL(%s)\n", u)
+	resp, err := http.Get(u)
 	if err != nil {
-		glog.Errorf("http.Get(%s): %s", url, err)
+		glog.Errorf("http.Get(%s): %s", u, err)
 		return j, err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("ioutil.ReadAll(resp.Body): %s", err)
-		return j, err
 	}
-
-	var f interface{}
-	err = json.Unmarshal(body, &f)
-	return f, err
+	s := string(body[:])
+	return s, err
 }
 
 func LoggedIn(w http.ResponseWriter, r *http.Request) (bool, User) {
