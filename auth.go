@@ -12,14 +12,9 @@ import (
 	"github.com/golang/glog"
 	"github.com/msbranco/goconfig"
 	"io/ioutil"
-	//"net/url"
 	"net/http"
 	"time"
 )
-
-
-const profileInfoURL = "https://www.googleapis.com/oauth2/v1/userinfo"
-const cachefile = "/tmp/ponytoken"
 
 var (
 	MyURL             string
@@ -220,36 +215,6 @@ func HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	return
 }
-func AddSession(w http.ResponseWriter,r *http.Request,  email string)( err error) {
-	var us User
-	if !UserExists(email) {
-		fmt.Printf("HandleOauth2Callback: creating new user %s", email)
-		us, err = AddUser(email)
-		if err != nil {
-			glog.Errorf("HandleOauth2Callback:UserExists()AddUser(%s): %s", email, err)
-		}
-	} else {
-		us, err = GetUserByEmail(email)
-		if err != nil {
-			glog.Errorf("HandleOauth2Callback:UserExists()GetUserEmail(%s): %s", email, err)
-		}
-	}
-	var authString = u.RandomString(64)
-
-
-	err = us.AddSession(authString)
-
-	if err != nil {
-		glog.Errorf("HandleOauth2Callback:stmtCookieIns.Exec(%s,%s): %s", us.ID, authString, err)
-	}
-	//set the cookie
-	expire := time.Now().AddDate(1, 0, 0) // year expirey seems reasonable
-	cookie := http.Cookie{Name: cookieName, Value: authString, Expires: expire}
-	http.SetCookie(w, &cookie)
-	http.Redirect(w, r, "/main", http.StatusFound)
-	return err
-}
-
 func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 	if facebookEnabled == false {
 		print("facebookEnabled is false, returning\n")
@@ -293,20 +258,37 @@ func HandleFacebookOauth2Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-func GetFromURL(u string) (j string, err error) {
-	fmt.Printf("GetJsonFromURL(%s)\n", u)
-	resp, err := http.Get(u)
-	if err != nil {
-		glog.Errorf("http.Get(%s): %s", u, err)
-		return j, err
+
+func AddSession(w http.ResponseWriter,r *http.Request,  email string)( err error) {
+	var us User
+	if !UserExists(email) {
+		fmt.Printf("HandleOauth2Callback: creating new user %s", email)
+		us, err = AddUser(email)
+		if err != nil {
+			glog.Errorf("HandleOauth2Callback:UserExists()AddUser(%s): %s", email, err)
+			return err
+		}
+	} else {
+		us, err = GetUserByEmail(email)
+		if err != nil {
+			glog.Errorf("HandleOauth2Callback:UserExists()GetUserEmail(%s): %s", email, err)
+			return err
+		}
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	var authString = u.RandomString(64)
+
+	err = us.AddSession(authString)
+
 	if err != nil {
-		glog.Errorf("ioutil.ReadAll(resp.Body): %s", err)
+		glog.Errorf("HandleOauth2Callback:stmtCookieIns.Exec(%s,%s): %s", us.ID, authString, err)
+		return err
 	}
-	s := string(body[:])
-	return s, err
+	//set the cookie
+	expire := time.Now().AddDate(1, 0, 0) // year expirey seems reasonable
+	cookie := http.Cookie{Name: cookieName, Value: authString, Expires: expire}
+	http.SetCookie(w, &cookie)
+	http.Redirect(w, r, "/main", http.StatusFound)
+	return err
 }
 
 func LoggedIn(w http.ResponseWriter, r *http.Request) (bool, User) {

@@ -2,26 +2,26 @@ package auth
 
 import (
 	"testing"
+	"net/http"
+	"github.com/stvp/assert"
+	"net/http/httptest"
 )
 
 // const te = "user@example.com" //imported from user
+var (
+	w = httptest.NewRecorder()
+	r = http.Request{}
+)
 
 func TestAuth(t *testing.T) {
 	initTest(t) //creates a blank DB to play with
 	print("Testing Auth\n")
+}
 
-	//Add a user
-	print("\tAddUser\n")
-	u1, err := AddUser(te)
-	if err != nil {
-		t.Errorf("AddUser(%s): %s", te, err)
-	}
+func TestAddSession(t *testing.T) {
+	print("AddSession\n")
+	initTest(t)
 
-	//And a session
-	print("\tAddSession\n")
-	err = u1.AddSession("my new session")
-	if err != nil {
-		t.Errorf("user.AddSession(%s): %s", "my new session", err)
-	}
-
+	err := AddSession(w,&r,te)
+	assert.Nil(t,err,"AddSession(w,r,te")
 }
