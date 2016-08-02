@@ -21,7 +21,6 @@ var (
 	stmtInsertUserLogin    *sql.Stmt
 	stmtGetUserShare       *sql.Stmt
 	stmtGetUserLogin       *sql.Stmt
-	stmtGetUser            *sql.Stmt
 	stmtGetUserID          *sql.Stmt
 	stmtGetUserBySession   *sql.Stmt
 	stmtGetUserByShared    *sql.Stmt
@@ -69,12 +68,6 @@ func userDB() {
 	stmtGetUserLogin, err = u.Sth(db, sgul)
 	if err != nil {
 		glog.Fatalf("u.Sth(%s): %s", sgul, err)
-	}
-
-	sgu := "select user_id from sessions as s where s.session_hash = ?"
-	stmtGetUser, err = u.Sth(db, sgu)
-	if err != nil {
-		glog.Fatalf("u.Sth(%s): %s", sgu, err)
 	}
 
 	sguid := "select id,admin from users where email = ?"

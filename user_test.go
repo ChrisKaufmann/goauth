@@ -2,9 +2,7 @@ package auth
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	u "github.com/ChrisKaufmann/goutils"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/msbranco/goconfig"
 	"testing"
@@ -55,7 +53,7 @@ func TestUser_DeleteSession(t *testing.T) {
 		t.Errorf("u1.DeleteSession(%s): %s", sid, err)
 	}
 	if SessionExists(sid) {
-		t.Errorf("Session still exists after deleting!")
+		t.Error("Session still exists after deleting!")
 	}
 
 }
@@ -158,7 +156,7 @@ func TestUserExists(t *testing.T) {
 	initTest(t)
 	print("UserExists\n")
 	if UserExists("user that shouldn't exist") {
-		t.Errorf("user shouldn't exist")
+		t.Error("user shouldn't exist")
 	}
 	if !UserExists(te) {
 		t.Errorf("User %s doesn't exist", te)
@@ -205,7 +203,7 @@ func TestGetUser(t *testing.T) {
 		t.Errorf("GetUser(1): %s", err)
 	}
 	if len(u.Email) < 1 {
-		t.Errorf("Invalid email for GetUser(1)")
+		t.Error("Invalid email for GetUser(1)")
 	}
 	if u.Admin != false {
 		t.Errorf("GetUserByEmail(%s).Admin false <=> %v", te, u.Admin)
@@ -236,11 +234,11 @@ func TestSessionExists(t *testing.T) {
 		t.Errorf("GetUserByEmail(%s): %s", te, err)
 	}
 	if SessionExists("shoudln'texist") {
-		t.Errorf("SessionExists(shouldn't exist) shouldn't exist")
+		t.Error("SessionExists(shouldn't exist) shouldn't exist")
 	}
 	u.AddSession("Now it should exist")
 	if !SessionExists("Now it should exist") {
-		t.Errorf("SessionExists(Now it should exist) doesn't exist")
+		t.Error("SessionExists(Now it should exist) doesn't exist")
 	}
 }
 func TestAllUsers(t *testing.T) {
@@ -249,13 +247,6 @@ func TestAllUsers(t *testing.T) {
 	ul, err := AllUsers()
 	assert.Nil(t, err, "AllUsers()")
 	assert.Equal(t, len(ul), 12, "len(AllUsers())")
-}
-
-func vl(t *testing.T, s string, e interface{}, a interface{}) {
-	if e != a {
-		err := errors.New("expected: " + u.Tostr(e) + " got: " + u.Tostr(a) + "\n")
-		t.Errorf(s, err)
-	}
 }
 func ec(t *testing.T, s string, err error) {
 	if err != nil {
