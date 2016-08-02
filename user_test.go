@@ -8,6 +8,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/msbranco/goconfig"
 	"testing"
+	"github.com/stvp/assert"
 )
 
 const te = "user@example.com"
@@ -242,6 +243,14 @@ func TestSessionExists(t *testing.T) {
 		t.Errorf("SessionExists(Now it should exist) doesn't exist")
 	}
 }
+func TestAllUsers(t *testing.T) {
+	initTest(t)
+	print("AllUsers\n")
+	ul, err := AllUsers()
+	assert.Nil(t, err, "AllUsers()")
+	assert.Equal(t, len(ul), 12, "len(AllUsers())")
+}
+
 func vl(t *testing.T, s string, e interface{}, a interface{}) {
 	if e != a {
 		err := errors.New("expected: " + u.Tostr(e) + " got: " + u.Tostr(a) + "\n")

@@ -29,6 +29,7 @@ var (
 	stmtGetUserByLoginCode *sql.Stmt
 	stmtLogoutSession      *sql.Stmt
 	stmtSetAdmin           *sql.Stmt
+	stmtGetAllUsers		*sql.Stmt
 )
 
 func userDB() {
@@ -116,6 +117,12 @@ func userDB() {
 	stmtSetAdmin, err = u.Sth(db, ssa)
 	if err != nil {
 		glog.Fatalf("u.Sth(%s): %s", ssa, err)
+	}
+
+	sga := "select id, email, admin from users where 1"
+	stmtGetAllUsers, err = u.Sth(db,sga)
+	if err != nil {
+		glog.Fatalf("u.Sth(db, %s): %s", sga, err)
 	}
 
 }
@@ -306,4 +313,17 @@ func SessionExists(s string) (e bool) {
 		return true
 	}
 	return e
+}
+func AllUsers() (ul []User, err error) {
+	rows, err := stmtGetAllUsers.Query()
+	if err != nil {
+		glog.Errorf("stmtGetAllUsers.Query(): %s", err)
+		return ul, err
+	}
+	for rows.Next() {
+		var u User
+		rows.Scan(&u.ID, &u.Email, &u.Admin)
+		ul = append(ul, u)
+	}
+	return ul, err
 }
